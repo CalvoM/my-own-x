@@ -38,6 +38,7 @@ typedef struct erow {
 struct editor_config {
   int cursor_x, cursor_y;
   int row_offset;
+  int col_offset;
   int screen_rows;
   int screen_cols;
   int num_rows;
@@ -202,13 +203,16 @@ void ab_free(struct editor_abuf *e_ab) { free(e_ab->b); }
 void editor_move_cursor(int key) {
   switch (key) {
   case ARROW_LEFT:
-    E.cursor_x--;
+    if (E.cursor_x != 0)
+      E.cursor_x--;
     break;
   case ARROW_RIGHT:
+    // if (E.cursor_x != E.screen_cols - 1)
     E.cursor_x++;
     break;
   case ARROW_UP:
-    E.cursor_y--;
+    if (E.cursor_y != 0)
+      E.cursor_y--;
     break;
   case ARROW_DOWN:
     if (E.cursor_y < E.num_rows)
@@ -253,7 +257,12 @@ void editor_scroll() {
   if (E.cursor_y >= (E.row_offset + E.screen_rows)) {
     E.row_offset = E.cursor_y - E.screen_rows + 1;
   }
+  if (E.cursor_x < E.col_offset)
+    E.col_offset = E.cursor_x;
+  if (E.cursor_x >= (E.col_offset + E.screen_cols))
+    E.col_offset = E.cursor_x - E.screen_cols + 1;
 }
+
 void editor_draw_rows(struct editor_abuf *e_ab) {
   int y;
   for (y = 0; y < E.screen_rows; y++) {
@@ -278,10 +287,12 @@ void editor_draw_rows(struct editor_abuf *e_ab) {
         ab_append(e_ab, "~", 1);
       }
     } else {
-      int len = E.row[file_row].size;
+      int len = E.row[file_row].size - E.col_offset;
+      if (len < 0)
+        len = 0;
       if (len > E.screen_cols)
         len = E.screen_cols;
-      ab_append(e_ab, E.row[file_row].chars, len);
+      ab_append(e_ab, &E.row[file_row].chars[E.col_offset], len);
     }
     ab_append(e_ab, "\x1b[K", 3);
     if (y < E.screen_rows - 1) {
@@ -298,8 +309,9 @@ void editor_refresh_screen() {
   editor_draw_rows(&e_ab);
   ab_append(&e_ab, "\x1b[H", 3);
   char buf[32];
-  int buf_len = snprintf(buf, sizeof(buf), "\x1b[%d;%dH",
-                         (E.cursor_y - E.row_offset) + 1, E.cursor_x + 1);
+  int buf_len =
+      snprintf(buf, sizeof(buf), "\x1b[%d;%dH", (E.cursor_y - E.row_offset) + 1,
+               (E.cursor_x - E.col_offset) + 1);
   ab_append(&e_ab, buf, buf_len);
   ab_append(&e_ab, "\x1b[?25h", 6);
   write(STDOUT_FILENO, e_ab.b, e_ab.len);
@@ -313,6 +325,7 @@ void init_editor() {
   E.num_rows = 0;
   E.row = NULL;
   E.row_offset = 0;
+  E.col_offset = 0;
   if (get_window_size(&E.screen_rows, &E.screen_cols) == -1)
     die("get_window_size");
 }
