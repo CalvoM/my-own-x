@@ -201,14 +201,23 @@ void ab_append(struct editor_abuf *e_ab, const char *s, int len) {
 void ab_free(struct editor_abuf *e_ab) { free(e_ab->b); }
 /*** input ***/
 void editor_move_cursor(int key) {
+  editor_row_t *row = (E.cursor_y >= E.num_rows) ? NULL : &E.row[E.cursor_y];
   switch (key) {
   case ARROW_LEFT:
-    if (E.cursor_x != 0)
+    if (E.cursor_x != 0) {
       E.cursor_x--;
+    } else if (E.cursor_y > 0) {
+      E.cursor_y--;
+      E.cursor_x = E.row[E.cursor_y].size;
+    }
     break;
   case ARROW_RIGHT:
-    // if (E.cursor_x != E.screen_cols - 1)
-    E.cursor_x++;
+    if (row && E.cursor_x < row->size) {
+      E.cursor_x++;
+    } else if (row && E.cursor_x == row->size) {
+      E.cursor_y++;
+      E.cursor_x = 0;
+    }
     break;
   case ARROW_UP:
     if (E.cursor_y != 0)
@@ -219,6 +228,10 @@ void editor_move_cursor(int key) {
       E.cursor_y++;
     break;
   }
+  row = (E.cursor_y >= E.num_rows) ? NULL : &E.row[E.cursor_y];
+  int row_len = row ? row->size : 0;
+  if (E.cursor_x > row_len)
+    E.cursor_x = row_len;
 }
 void editor_process_key_press() {
   int c = editor_read_key();
